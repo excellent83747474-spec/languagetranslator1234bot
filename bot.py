@@ -12,9 +12,8 @@ from telegram.ext import (
     ContextTypes,
     filters
 )
-from googletrans import Translator, LANGUAGES
-import aiohttp
-import json
+from deep_translator import GoogleTranslator
+from deep_translator.constants import GOOGLE_LANGUAGES_TO_CODES, GOOGLE_CODES_TO_LANGUAGES
 
 # Configure logging
 logging.basicConfig(
@@ -22,9 +21,6 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
-
-# Initialize translator
-translator = Translator()
 
 # Language database with full names and codes
 LANGUAGE_DB = {
@@ -73,12 +69,16 @@ BOT_CONFIG = {
     'max_history': 10
 }
 
+# Initialize translator with default target
+DEFAULT_TARGET = 'en'
+
 class TranslationBot:
     """Main bot class with all functionality"""
     
     def __init__(self):
         self.application = None
         self.start_time = datetime.now()
+        self.translator = GoogleTranslator(source='auto', target=DEFAULT_TARGET)
     
     def get_language_name(self, code: str) -> str:
         """Get full language name from code"""
@@ -145,7 +145,6 @@ I can translate text into over 100 languages instantly!
 • 🔍 Auto-detect source language
 • 🎯 Set custom target language
 • 📚 100+ languages supported
-• 📊 Translation confidence scores
 • 📖 Translation history
 
 *🚀 Quick Commands:*
@@ -200,7 +199,6 @@ Simply send me any text and I'll translate it!
         keyboard = [
             [InlineKeyboardButton("📌 Popular Languages", callback_data="show_popular")],
             [InlineKeyboardButton("📚 All Languages (A-Z)", callback_data="show_all_0")],
-            [InlineKeyboardButton("🔍 Search Language", callback_data="search_lang")],
             [InlineKeyboardButton("ℹ️ Current Language", callback_data="current_lang")]
         ]
         
@@ -286,14 +284,13 @@ Simply send me any text and I'll translate it!
 
 *📝 Version:* 2.0.0
 *🌐 Languages:* {len(LANGUAGE_DB)} languages supported
-*🔧 Built with:* Python 3.10, python-telegram-bot 20.7, googletrans
+*🔧 Built with:* Python 3.10, python-telegram-bot 20.7, deep-translator
 *⏱️ Uptime:* {uptime_str}
 
 *✨ Features:*
 • ✅ Real-time translation
 • 🔍 Auto-detect source language
 • 🎯 Custom target language
-• 📊 Confidence scores
 • 📖 Translation history
 • 📚 100+ languages
 • 🔒 Privacy-focused
@@ -304,7 +301,6 @@ Simply send me any text and I'll translate it!
 
 *🔗 Links:*
 • [GitHub Repository](https://github.com/yourusername/telegram-translator-bot)
-• [Support](https://t.me/yourchannel)
 
 *Created for:* @languagetranslator1234bot
 """
@@ -327,11 +323,15 @@ Simply send me any text and I'll translate it!
                 return
             
             # Detect source language
-            detection = translator.detect(text)
-            source_lang = detection.lang
+            try:
+                detected = GoogleTranslator(source='auto', target='en').detect(text)
+                source_lang = detected if detected else 'unknown'
+            except:
+                source_lang = 'unknown'
             
-            # Translate
-            translated = translator.translate(text, dest=target_lang)
+            # Translate using deep-translator
+            self.translator.target = target_lang
+            translated_text = self.translator.translate(text)
             
             # Get language names
             source_name = self.get_language_name(source_lang)
@@ -345,10 +345,7 @@ Simply send me any text and I'll translate it!
 {text}
 
 🌐 *Translated* ({target_name}):
-{translated.text}
-
-📊 *Confidence:* {detection.confidence:.1%}
-🔍 *Detected:* {source_name}
+{translated_text}
 """
             
             await update.message.reply_text(response, parse_mode='Markdown')
@@ -358,7 +355,7 @@ Simply send me any text and I'll translate it!
                 'source': source_name,
                 'target': target_name,
                 'original': text,
-                'translated': translated.text,
+                'translated': translated_text,
                 'timestamp': datetime.now().isoformat()
             }
             if user_id not in user_history:
@@ -378,8 +375,8 @@ Simply send me any text and I'll translate it!
     async def _detect_language(self, update: Update, text: str):
         """Detect language of text"""
         try:
-            detection = translator.detect(text)
-            lang_name = self.get_language_name(detection.lang)
+            detected = GoogleTranslator(source='auto', target='en').detect(text)
+            lang_name = self.get_language_name(detected) if detected else 'Unknown'
             
             response = f"""
 🔍 *Language Detection Result*
@@ -387,7 +384,6 @@ Simply send me any text and I'll translate it!
 📝 *Text:* {text[:100]}{'...' if len(text) > 100 else ''}
 
 🌐 *Detected Language:* {lang_name}
-📊 *Confidence:* {detection.confidence:.1%}
 """
             await update.message.reply_text(response, parse_mode='Markdown')
             
